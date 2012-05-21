@@ -822,6 +822,53 @@ void enable_ThreeGPower(void)
 }
 EXPORT_SYMBOL(enable_ThreeGPower);
 
+static ssize_t SerialNumber_show(struct kobject *kobj, struct kobj_attribute *attr, char * buf)
+{
+	int i;
+	char * s = buf;
+	u8 val8[14] = {0};
+	u16 val16;
+	s32 val32;
+
+	for(i=0;i<=6;i++)
+	{
+		val32 = i2c_smbus_read_word_data_retry(EC_Bat_device->client,0x66);
+		val16 = val32 & 0x0000ffff;
+		TransformToByte(val16, &val8[2*i], &val8[2*i+1]);
+		msleep(10);
+	}
+
+	s += sprintf(s, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",val8[12],val8[11],val8[10],val8[9],val8[8],val8[7],val8[6],val8[5],val8[4],val8[3],val8[2],val8[1],val8[0]);
+
+	return (s - buf);
+}
+
+static ssize_t SerialNumber_store(struct kobject *kobj, struct kobj_attribute *attr, const char * buf, size_t n)
+{
+	u8  val8_0, val8_1;
+	u16 val16;
+	int i;
+
+	for(i=0;i<=5;i++)
+	{
+		val8_0 = TransformCharToByte(buf,24-4*i);
+		val8_1 = TransformCharToByte(buf,22-4*i);
+
+		val16 = TransformToWord(val8_0, val8_1);
+		i2c_smbus_write_word_data_retry(EC_Bat_device->client,0x67,val16);
+		msleep(10);
+	}
+
+	val8_0 = TransformCharToByte(buf,0);
+	val8_1 = 0;
+
+	val16 = TransformToWord(val8_0, val8_1);
+	i2c_smbus_write_word_data_retry(EC_Bat_device->client,0x67,val16);
+	msleep(10);
+
+	return n;
+}
+
 static ssize_t ECflashMode_show(struct kobject *kobj, struct kobj_attribute *attr, char * buf)
 {
 	char * s = buf;
@@ -935,6 +982,109 @@ static ssize_t ManufactureDate_store(struct kobject *kobj, struct kobj_attribute
 	val16 = TransformToWord(val8_0, val8_1);
 	i2c_smbus_write_word_data_retry(EC_Bat_device->client,0x6f,val16);
 	msleep(10);
+
+	return n;
+}
+
+static ssize_t SerialNumberwithoutBarcode_show(struct kobject *kobj, struct kobj_attribute *attr, char * buf)
+{
+	int i;
+	char * s = buf;
+	u32 val32;
+	u16 val16;
+	u8 val8[22] = {0};
+	u8 nostore_before = 0;
+
+	for(i=10;i>=0;i--)
+	{
+		val32 = i2c_smbus_read_word_data_retry(EC_Bat_device->client, 0x6a);
+		val16 = val32 & 0x0000ffff;
+		msleep(10);
+		val8[2*i+1] = val16 & 0x000000ff;
+		val8[2*i] = (val16 >> 8) & 0x000000ff;
+	}
+
+	for(i=0;i<=21;i++)
+	{
+		if(val8[i] != 0xff)
+			nostore_before = 0;
+		else
+			nostore_before = 1;
+	}
+
+	if(nostore_before)
+		s += sprintf(s, "ffffffffffffffffffffff\n");
+	else
+		s += sprintf(s, "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c\n", val8[21],val8[20],val8[19],val8[18],val8[17],val8[16],val8[15],val8[14],val8[13],val8[12],val8[11],val8[10],val8[9],val8[8],val8[7],val8[6],val8[5],val8[4],val8[3],val8[2],val8[1],val8[0]);
+
+	return (s - buf);
+}
+
+static ssize_t SerialNumberwithoutBarcode_store(struct kobject *kobj, struct kobj_attribute *attr, const char * buf, size_t n)
+{
+	u8  val8_0, val8_1;
+	u16 val16;
+	int i;
+
+	for(i=0;i<11;i++)
+	{
+		val8_0 = buf[2*i];
+		val8_1 = buf[2*i+1];
+
+		val16 = TransformToWord(val8_0, val8_1);
+		i2c_smbus_write_word_data_retry(EC_Bat_device->client,0x6b,val16);
+
+		msleep(10);
+	}
+
+	return n;
+}
+
+static ssize_t IMEIwithBarcode_show(struct kobject *kobj, struct kobj_attribute *attr, char * buf)
+{
+	int i,j=0;
+	char * s = buf;
+	u8 val8[16] = {0};
+	u16 val16;
+	s32 val32;
+
+	for(i=0;i<=3;i++)
+	{
+		val32 = i2c_smbus_read_word_data_retry(EC_Bat_device->client, 0x6c);
+		val16 = val32 & 0x0000ffff;
+		TransformToByte(val16, &val8[2*i], &val8[2*i+1]);
+		msleep(10);
+	}
+
+	if(val8[0]&0x80)
+		j+=8;
+	if(val8[0]&0x40)
+		j+=4;
+	if(val8[0]&0x20)
+		j+=2;
+	if(val8[0]&0x10)
+		j+=1;
+
+	s += sprintf(s, "%02x%02x%02x%02x%02x%02x%02x%01x\n",val8[7],val8[6],val8[5],val8[4],val8[3],val8[2],val8[1],j);
+
+	return (s - buf);
+}
+
+static ssize_t IMEIwithBarcode_store(struct kobject *kobj, struct kobj_attribute *attr, const char * buf, size_t n)
+{
+	u8  val8_0, val8_1;
+	u16 val16;
+	int i;
+
+	for(i=0;i<=3;i++)
+	{
+		val8_0 = TransformCharToByte(buf,14-4*i);
+		val8_1 = TransformCharToByte(buf,12-4*i);
+
+		val16 = TransformToWord(val8_0, val8_1);
+		i2c_smbus_write_word_data_retry(EC_Bat_device->client,0x6d,val16);
+		msleep(10);
+	}
 
 	return n;
 }
@@ -1340,10 +1490,13 @@ debug_attr(ECflashwrite);
 debug_attr(ECflashread);
 debug_attr(MicSwitch);
 debug_attr(ThreeGPower);
+debug_attr(SerialNumber);
 debug_attr(ECflashMode);
 debug_attr(SkuNumber);
 debug_attr(LEDAndroidOff);
 debug_attr(ManufactureDate);
+debug_attr(SerialNumberwithoutBarcode);
+debug_attr(IMEIwithBarcode);
 debug_attr(Reset);
 debug_attr(BatCurrent);
 debug_attr(BoardID);
@@ -1386,10 +1539,13 @@ static struct attribute * g[] = {
 	&RecoveryMode_attr.attr,
 	&MicSwitch_attr.attr,
 	&ThreeGPower_attr.attr,
+	&SerialNumber_attr.attr,
 	&ECflashMode_attr.attr,
 	&SkuNumber_attr.attr,
 	&LEDAndroidOff_attr.attr,
 	&ManufactureDate_attr.attr,
+	&SerialNumberwithoutBarcode_attr.attr,
+	&IMEIwithBarcode_attr.attr,
 	&Reset_attr.attr,
 	&BatCurrent_attr.attr,
 	&BoardID_attr.attr,

@@ -1,116 +1,124 @@
 /*
- * AD5820 focuser driver.
+ * kernel/drivers/media/video/tegra
  *
- * Copyright (C) 2010-2011 NVIDIA Corporation.
+ * AD5820 focuser driver
  *
- * Contributors:
- *      Sachin Nikam <snikam@nvidia.com>
+ * Copyright (C) 2010 NVIDIA Corporation
  *
- * Based on ov5650.c.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- * This file is licensed under the terms of the GNU General Public License
- * version 2. This program is licensed "as is" without any warranty of any
- * kind, whether express or implied.
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/i2c.h>
 #include <linux/miscdevice.h>
-#include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <media/ad5820.h>
 
-/* Focuser single step & full scale transition time truth table
- * in the format of:
- *   index	mode		single step transition	full scale transition
- *	0	0			0			0
- *	1	1			50uS			51.2mS
- *	2	1			100uS			102.3mS
- *	3	1			200uS			204.6mS
- *	4	1			400uS			409.2mS
- *	5	1			800uS			818.4mS
- *	6	1			1600uS			1636.8mS
- *	7	1			3200uS			3273.6mS
- *	8	0			0			0
- *	9	2			50uS			1.1mS
- *	A	2			100uS			2.2mS
- *	B	2			200uS			4.4mS
- *	C	2			400uS			8.8mS
- *	D	2			800uS			17.6mS
- *	E	2			1600uS			35.2mS
- *	F	2			3200uS			70.4mS
- */
+#define AD5820_MAX_RETRIES (3)
 
-/* pick up the mode index setting and its settle time from the above table */
-#define AD5820_TRANSITION_MODE 0x0B
-#define SETTLETIME_MS 5
-
-#define POS_LOW (0)
-#define POS_HIGH (1023)
-#define FOCAL_LENGTH (4.507f)
-#define FNUMBER (2.8f)
-#define FPOS_COUNT 1024
+#define MOVE_STEP 10
 
 struct ad5820_info {
 	struct i2c_client *i2c_client;
-	struct regulator *regulator;
-	struct ad5820_config config;
+	int16_t previous_pos;
 };
 
-static int ad5820_write(struct i2c_client *client, u32 value)
+struct ad5820_info *info;
+
+static int ad5820_write(struct i2c_client *client, u16 value)
 {
-	int count;
+	int err;
 	struct i2c_msg msg[1];
 	unsigned char data[2];
+	int retry = 0;
 
 	if (!client->adapter)
 		return -ENODEV;
 
-	data[0] = (u8) ((value >> 4) & 0x3F);
-	data[1] = (u8) ((value & 0xF) << 4) | AD5820_TRANSITION_MODE;
+	data[0] = (u8) (value >> 8);
+	data[1] = (u8) (value & 0xFF);
 
 	msg[0].addr = client->addr;
 	msg[0].flags = 0;
 	msg[0].len = ARRAY_SIZE(data);
 	msg[0].buf = data;
 
-	count = i2c_transfer(client->adapter, msg, ARRAY_SIZE(msg));
-	if (count == ARRAY_SIZE(msg))
-		return 0;
-
+	do {
+		err = i2c_transfer(client->adapter, msg, ARRAY_SIZE(msg));
+		if (err == ARRAY_SIZE(msg))
+			return 0;
+		retry++;
+		pr_err("ad5820: i2c transfer failed, retrying %x\n",value);
+		msleep(3);
+	} while (retry <= AD5820_MAX_RETRIES);
 	return -EIO;
-}
-
-static int ad5820_set_position(struct ad5820_info *info, u32 position)
-{
-	if (position < info->config.pos_low ||
-	    position > info->config.pos_high)
-		return -EINVAL;
-
-	return ad5820_write(info->i2c_client, position);
 }
 
 static long ad5820_ioctl(struct file *file,
 			unsigned int cmd, unsigned long arg)
 {
 	struct ad5820_info *info = file->private_data;
+	u16 position;
+	int16_t pos_current, pos_target;
+
+	pr_info("ad5820: %s\n",__func__);
 
 	switch (cmd) {
-	case AD5820_IOCTL_GET_CONFIG:
-	{
-		if (copy_to_user((void __user *) arg,
-				 &info->config,
-				 sizeof(info->config))) {
-			pr_err("%s: 0x%x\n", __func__, __LINE__);
+	case AD5820_IOCTL_SET_POSITION:
+
+		if (copy_from_user(&position,
+				   (const void __user *)arg,
+				   sizeof(position))) {
 			return -EFAULT;
 		}
 
+		pos_current = info->previous_pos;
+
+		if (position == 0xFFFF)
+			pos_target = 0;
+		else
+			pos_target = (int16_t)((position & 0x3FF0) >> 4);
+
+		pr_info("%s prepare inc/dec flow, pos_current= %d, pos_target= %d\n",
+			__func__, pos_current, pos_target);
+		if (pos_current > pos_target)
+		{
+			for (; pos_current>pos_target; pos_current-=MOVE_STEP) {
+				ad5820_write(info->i2c_client, ((u16)pos_current<<4));
+				udelay(500);
+				pr_debug("%s -10 pos_current= %d, pos_target=%d\n",
+					__func__, pos_current, pos_target);
+			}
+		}
+
+		else if (pos_current < pos_target)
+		{
+			for (; pos_current<pos_target; pos_current+=MOVE_STEP) {
+				ad5820_write(info->i2c_client, ((u16)pos_current<<4));
+				udelay(500);
+				pr_debug("%s +10 pos_current= %d, pos_target= %d\n",
+					__func__, pos_current, pos_target);
+			}
+		}
+
+		ad5820_write(info->i2c_client, position);
+		info->previous_pos = pos_target;
 		break;
-	}
-	case AD5820_IOCTL_SET_POSITION:
-		return ad5820_set_position(info, (u32) arg);
+
 	default:
 		return -EINVAL;
 	}
@@ -118,24 +126,21 @@ static long ad5820_ioctl(struct file *file,
 	return 0;
 }
 
-struct ad5820_info *info;
-
 static int ad5820_open(struct inode *inode, struct file *file)
 {
 	file->private_data = info;
-	if (info->regulator)
-		regulator_enable(info->regulator);
 	return 0;
 }
 
 int ad5820_release(struct inode *inode, struct file *file)
 {
-	if (info->regulator)
-		regulator_disable(info->regulator);
 	file->private_data = NULL;
+
+	ad5820_write(info->i2c_client, 0xFFFF);
+	pr_info("ad5820: release af position to 0xFFFF");
+
 	return 0;
 }
-
 
 static const struct file_operations ad5820_fileops = {
 	.owner = THIS_MODULE,
@@ -155,7 +160,7 @@ static int ad5820_probe(struct i2c_client *client,
 {
 	int err;
 
-	pr_info("ad5820: probing sensor.\n");
+	pr_info("ad5820: probing focuser.\n");
 
 	info = kzalloc(sizeof(struct ad5820_info), GFP_KERNEL);
 	if (!info) {
@@ -170,22 +175,8 @@ static int ad5820_probe(struct i2c_client *client,
 		return err;
 	}
 
-	info->regulator = regulator_get(&client->dev, "vdd_vcore_af");
-	if (IS_ERR_OR_NULL(info->regulator)) {
-		dev_err(&client->dev, "unable to get regulator %s\n",
-			dev_name(&client->dev));
-		info->regulator = NULL;
-	} else {
-		regulator_enable(info->regulator);
-	}
-
 	info->i2c_client = client;
-	info->config.settle_time = SETTLETIME_MS;
-	info->config.focal_length = FOCAL_LENGTH;
-	info->config.fnumber = FNUMBER;
-	info->config.pos_low = POS_LOW;
-	info->config.pos_high = POS_HIGH;
-	i2c_set_clientdata(client, info);
+	info->previous_pos = 0;
 	return 0;
 }
 
@@ -217,7 +208,7 @@ static struct i2c_driver ad5820_i2c_driver = {
 
 static int __init ad5820_init(void)
 {
-	pr_info("ad5820 sensor driver loading\n");
+	pr_info("ad5820 focuser driver loading\n");
 	return i2c_add_driver(&ad5820_i2c_driver);
 }
 
@@ -228,4 +219,3 @@ static void __exit ad5820_exit(void)
 
 module_init(ad5820_init);
 module_exit(ad5820_exit);
-

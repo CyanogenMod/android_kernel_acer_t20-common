@@ -207,7 +207,7 @@ static int tegra_camera_power_on(struct tegra_camera_dev *dev)
 	int ret = 0;
 
 	if (dev->power_refcnt++ == 0) {
-#if !defined(CONFIG_ARCH_ACER_T20)
+#if !defined(CONFIG_MACH_PICASSO_E)
 		/* Enable external power */
 		if (dev->reg) {
 			ret = regulator_enable(dev->reg);
@@ -245,7 +245,7 @@ static int tegra_camera_power_off(struct tegra_camera_dev *dev)
 				"%s: powergate failed.\n",
 				__func__);
 #endif
-#if !defined(CONFIG_ARCH_ACER_T20)
+#if !defined(CONFIG_MACH_PICASSO_E)
 		/* Disable external power */
 		if (dev->reg) {
 			ret = regulator_disable(dev->reg);
@@ -574,10 +574,7 @@ void extern_tegra_camera_enable_vi(void)
 {
 	int ret = 0;
 	if(t20_dev) {
-		// When booting device, camera needs to turn on vcsi power once.
-		// After turning on vcsi power, it always remains on with camera standby mode.
-		// So camera don't need to turn on/off vcsi power via tegra_camera_power_on()
-		// and tegra_camera_power_off().
+		// Enable external power
 		if (t20_dev->reg) {
 			ret = regulator_enable(t20_dev->reg);
 			if (ret) {
@@ -595,7 +592,24 @@ void extern_tegra_camera_enable_vi(void)
 
 void extern_tegra_camera_disable_vi(void)
 {
+#if !defined(CONFIG_MACH_PICASSO_E)
+	int ret = 0;
+#endif
+
 	if(t20_dev) {
+
+#if !defined(CONFIG_MACH_PICASSO_E)
+		// Disable external power
+		if (t20_dev->reg) {
+			ret = regulator_disable(t20_dev->reg);
+			if (ret) {
+				dev_err(t20_dev->dev,
+				"%s: disable csi regulator failed.\n",
+				__func__);
+			}
+		}
+#endif
+
 		tegra_camera_disable_vi(t20_dev);
 		tegra_camera_disable_isp(t20_dev);
 		tegra_camera_disable_csi(t20_dev);

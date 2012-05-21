@@ -25,5 +25,8 @@ struct tegra_wm8903_platform_data {
 #if defined(CONFIG_ARCH_ACER_T30)
 	int gpio_bypass_switch_en;
 #endif
+#if defined(CONFIG_ARCH_ACER_T20)
+	int gpio_spkr_mute;
+#endif
 #endif
 };

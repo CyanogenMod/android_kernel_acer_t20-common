@@ -149,7 +149,7 @@ config SND_SOC_TEGRA_TLV320AIC326X
 
 config ACER_FM_SINGLE_MIC
 	tristate "SoC Audio support for Tegra boards using fm2018 single mic"
-	depends on MACH_PICASSO && MACH_PICASSO_E
+	depends on MACH_PICASSO && MACH_PICASSO_E || MACH_VANGOGH
 	default n
 	help
 	  Say Y or M here if you want to switch mic by fm2018.

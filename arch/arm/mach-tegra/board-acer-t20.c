@@ -385,12 +385,22 @@ static void rotationlock_init(void)
 		.debounce_interval = _debounce_msec,        \
 	}
 
-static struct gpio_keys_button picasso_keys[] = {
+#ifdef CONFIG_MACH_VANGOGH
+static struct gpio_keys_button acer_keys[] = {
+	[0] = GPIO_KEY(KEY_VOLUMEUP, PQ4, 1, 0, 10),
+	[1] = GPIO_KEY(KEY_VOLUMEDOWN, PQ5, 1, 0, 10),
+	[2] = GPIO_KEY(KEY_POWER, PC7, 0, 1, 0),
+	[3] = GPIO_KEY(KEY_POWER, PI3, 0, 0, 0),
+	[4] = GPIO_KEY(KEY_HOME, PQ1, 0, 0,0),
+};
+#else
+static struct gpio_keys_button acer_keys[] = {
        [0] = GPIO_KEY(KEY_VOLUMEUP, PQ4, 1, 0, 10),
        [1] = GPIO_KEY(KEY_VOLUMEDOWN, PQ5, 1, 0, 10),
        [2] = GPIO_KEY(KEY_POWER, PC7, 0, 1, 0),
        [3] = GPIO_KEY(KEY_POWER, PI3, 0, 0, 0),
 };
+#endif
 
 #define PMC_WAKE_STATUS 0x14
 
@@ -407,26 +417,26 @@ static int ventana_wakeup_key(void)
 	return status & TEGRA_WAKE_GPIO_PC7 ? KEY_POWER : KEY_RESERVED;
 }
 
-static struct gpio_keys_platform_data picasso_keys_platform_data = {
-	.buttons	= picasso_keys,
-	.nbuttons	= ARRAY_SIZE(picasso_keys),
+static struct gpio_keys_platform_data acer_keys_platform_data = {
+	.buttons	= acer_keys,
+	.nbuttons	= ARRAY_SIZE(acer_keys),
 	.wakeup_key	= ventana_wakeup_key,
 };
 
-static struct platform_device picasso_keys_device = {
+static struct platform_device acer_keys_device = {
 	.name	= "gpio-keys",
 	.id	= 0,
 	.dev	= {
-		.platform_data	= &picasso_keys_platform_data,
+		.platform_data	= &acer_keys_platform_data,
 	},
 };
 
-static void picasso_keys_init(void)
+static void acer_keys_init(void)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(picasso_keys); i++)
-		tegra_gpio_enable(picasso_keys[i].gpio);
+	for (i = 0; i < ARRAY_SIZE(acer_keys); i++)
+		tegra_gpio_enable(acer_keys[i].gpio);
 }
 #endif
 
@@ -459,6 +469,33 @@ static void vib_init(void)
 }
 #endif
 
+#ifdef CONFIG_DOCK_V1
+static struct gpio_switch_platform_data dock_switch_platform_data = {
+	.gpio = TEGRA_GPIO_PR0,
+};
+
+static struct platform_device dock_switch = {
+	.name	= "acer-dock",
+	.id	= -1,
+	.dev	= {
+		.platform_data  = &dock_switch_platform_data,
+	},
+};
+
+static void acer_dock_init(void)
+{
+	tegra_gpio_enable(TEGRA_GPIO_PR0);
+	tegra_gpio_enable(TEGRA_GPIO_PR1);
+	tegra_gpio_enable(TEGRA_GPIO_PX6);
+
+	if (is_tegra_debug_uartport_hs()) {
+		platform_device_register(&dock_switch);
+	} else {
+		pr_info("UART DEBUG MESSAGE ON!!!\n");
+	}
+}
+#endif
+
 static struct platform_device tegra_camera = {
 	.name = "tegra_camera",
 	.id = -1,
@@ -474,6 +511,11 @@ static struct tegra_wm8903_platform_data ventana_audio_pdata = {
 	.gpio_debug_switch_en   = TEGRA_GPIO_DEBUG_SWITCH_EN,
 #else
 	.gpio_debug_switch_en   = -1,
+#endif
+#ifdef CONFIG_MACH_VANGOGH
+	.gpio_spkr_mute      = TEGRA_GPIO_SPKR_MUTE,
+#else
+	.gpio_spkr_mute      = -1,
 #endif
 };
 
@@ -500,12 +542,32 @@ static struct platform_device ram_console_device = {
 };
 #endif
 
+#ifdef CONFIG_PSENSOR
+static struct gpio_switch_platform_data psensor_switch_platform_data = {
+	.gpio = TEGRA_GPIO_PC1,
+};
+
+static struct platform_device psensor_switch = {
+	.name   = "psensor",
+	.id     = -1,
+	.dev    = {
+		.platform_data  = &psensor_switch_platform_data,
+	},
+};
+
+static void p_sensor_init(void)
+{
+	// enable gpio for psensor
+	tegra_gpio_enable(TEGRA_GPIO_PC1);
+}
+#endif
+
 static struct platform_device *ventana_devices[] __initdata = {
 	&tegra_pmu_device,
 	&tegra_gart_device,
 	&tegra_aes_device,
 #ifdef CONFIG_KEYBOARD_GPIO
-	&picasso_keys_device,
+	&acer_keys_device,
 #endif
 #if defined(CONFIG_ACER_VIBRATOR)
 	&vib_timed_gpio_device,
@@ -528,7 +590,152 @@ static struct platform_device *ventana_devices[] __initdata = {
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
 	&ram_console_device,
 #endif
+#ifdef CONFIG_PSENSOR
+	&psensor_switch,
+#endif
+
 };
+
+#ifdef CONFIG_TOUCHSCREEN_CYPRESS
+#include <linux/input/cyttsp.h>
+#define CY_I2C_IRQ_GPIO        TEGRA_GPIO_PV6
+#define CY_I2C_ADR             CY_TCH_I2C_ADDR  /* LSTS Operational mode I2C address */
+#define CY_I2C_VKEY_NAME       "virtualkeys.cyttsp-i2c" /* must match I2C name */
+#define CY_MAXX 1024
+#define CY_MAXY 600
+#define CY_VK_SZ_X             60
+#define CY_VK_SZ_Y             80
+#define CY_VK_CNTR_X1          (CY_VK_SZ_X*0)+(CY_VK_SZ_X/2)
+#define CY_VK_CNTR_X2          (CY_VK_SZ_X*1)+(CY_VK_SZ_X/2)
+#define CY_VK_CNTR_X3          (CY_VK_SZ_X*2)+(CY_VK_SZ_X/2)
+#define CY_VK_CNTR_X4          (CY_VK_SZ_X*3)+(CY_VK_SZ_X/2)
+#define CY_VK_CNTR_Y1          CY_MAXY+(CY_VK_SZ_Y/2)
+#define CY_VK_CNTR_Y2          CY_MAXY+(CY_VK_SZ_Y/2)
+#define CY_VK_CNTR_Y3          CY_MAXY+(CY_VK_SZ_Y/2)
+#define CY_VK_CNTR_Y4          CY_MAXY+(CY_VK_SZ_Y/2)
+#define CY_VK1_POS             ":95:770:190:60"
+#define CY_VK2_POS             ":285:770:190:60"
+#define CY_VK3_POS             ":475:770:190:60"
+#define CY_VK4_POS             ":665:770:190:60"
+
+enum cyttsp_gest {
+	CY_GEST_GRP_NONE = 0x0F,
+	CY_GEST_GRP1 = 0x10,
+	CY_GEST_GRP2 = 0x20,
+	CY_GEST_GRP3 = 0x40,
+	CY_GEST_GRP4 = 0x80,
+};
+
+/* default bootloader keys */
+u8 dflt_bl_keys[] = {
+	0, 1, 2, 3, 4, 5, 6, 7
+};
+
+static int cyttsp_i2c_init(void)
+{
+	int ret;
+
+	ret = gpio_request(CY_I2C_IRQ_GPIO, "CYTTSP I2C IRQ GPIO");
+	if (ret) {
+		pr_err("%s: Failed to request GPIO %d\n", __func__, CY_I2C_IRQ_GPIO);
+		return ret;
+	}
+	gpio_direction_input(CY_I2C_IRQ_GPIO);
+	return 0;
+}
+
+static void cyttsp_i2c_exit(void)
+{
+	gpio_free(CY_I2C_IRQ_GPIO);
+}
+
+static int cyttsp_i2c_wakeup(void)
+{
+	return 0;
+}
+
+static struct cyttsp_platform_data cypress_i2c_ttsp_platform_data = {
+	.wakeup = cyttsp_i2c_wakeup,
+	.init = cyttsp_i2c_init,
+	.exit = cyttsp_i2c_exit,
+	.maxx = CY_MAXX,
+	.maxy = CY_MAXY,
+	.use_hndshk = false,
+	.use_sleep = true,
+
+	/* activate up to 4 groups and set active distance */
+	.act_dist = CY_GEST_GRP_NONE & CY_ACT_DIST_DFLT,
+
+	/*change act_intrvl to customize the Active power state
+	 *scanning/processing refresh interval for Operating mode
+	 */
+	.act_intrvl = CY_ACT_INTRVL_DFLT,
+	/* change tch_tmout to customize the touch timeout for the
+	 * Active power state for Operating mode
+	 */
+	.tch_tmout = CY_TCH_TMOUT_DFLT,
+	/* change lp_intrvl to customize the Low Power power state
+	 * scanning/processing refresh interval for Operating mode
+	 */
+	.lp_intrvl = CY_LP_INTRVL_DFLT,
+	.name = CY_I2C_NAME,
+	.irq_gpio = CY_I2C_IRQ_GPIO,
+	.bl_keys = dflt_bl_keys,
+};
+
+static const struct i2c_board_info ventana_i2c_bus1_touch_info[] = {
+	{
+		I2C_BOARD_INFO(CY_I2C_NAME, CY_I2C_ADR),
+		.irq = TEGRA_GPIO_TO_IRQ(CY_I2C_IRQ_GPIO),
+		.platform_data = &cypress_i2c_ttsp_platform_data,
+	},
+};
+
+static int __init ventana_touch_init_cypress(void)
+{
+	tegra_gpio_enable(TEGRA_GPIO_PV6);
+	tegra_gpio_enable(TEGRA_GPIO_PQ7);
+	i2c_register_board_info(0, ventana_i2c_bus1_touch_info, 1);
+	return 0;
+}
+#endif
+
+#if defined(CONFIG_TOUCHSCREEN_ATMEL_MXT1386)
+static struct i2c_board_info __initdata atmel_mXT1386_i2c_info[] = {
+	{
+		I2C_BOARD_INFO("maXTouch", 0X4C),
+		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PV6),
+	},
+};
+
+static int __init touch_init_atmel_mXT1386(void)
+{
+	int ret;
+
+	tegra_gpio_enable(TEGRA_GPIO_PV6);
+	tegra_gpio_enable(TEGRA_GPIO_PQ7);
+
+	ret = gpio_request(TEGRA_GPIO_PV6, "atmel_maXTouch1386_irq_gpio");
+	if (ret < 0)
+		printk("atmel_maXTouch1386: gpio_request TEGRA_GPIO_PQ6 fail\n");
+
+	ret = gpio_request(TEGRA_GPIO_PQ7, "atmel_maXTouch1386");
+	if (ret < 0)
+		printk("atmel_maXTouch1386: gpio_request fail\n");
+
+	ret = gpio_direction_output(TEGRA_GPIO_PQ7, 0);
+	if (ret < 0)
+		printk("atmel_maXTouch1386: gpio_direction_output fail\n");
+	gpio_set_value(TEGRA_GPIO_PQ7, 0);
+	msleep(1);
+	gpio_set_value(TEGRA_GPIO_PQ7, 1);
+	msleep(100);
+
+	i2c_register_board_info(0, atmel_mXT1386_i2c_info, 1);
+
+	return 0;
+}
+#endif
 
 #if defined(CONFIG_TOUCHSCREEN_ATMEL_768E)
 static struct i2c_board_info __initdata atmel_mXT768e_i2c_info[] = {
@@ -635,11 +842,14 @@ static void ventana_usb_init(void)
 
 	platform_device_register(&tegra_udc_device);
 #if !defined(CONFIG_MACH_PICASSO_E)
-	platform_device_register(&tegra_ehci2_device);
+	if(get_sku_id() == BOARD_PICASSO_3G || get_sku_id() == BOARD_VANGOGH_3G)
+		platform_device_register(&tegra_ehci2_device);
 #endif
 
+#if !defined(CONFIG_MACH_VANGOGH)
 	tegra_ehci3_device.dev.platform_data=&tegra_ehci_pdata[2];
 	platform_device_register(&tegra_ehci3_device);
+#endif
 }
 
 int get_pin_value(unsigned int gpio, char *name)
@@ -726,17 +936,29 @@ static void __init acer_t20_init(void)
 	acer_t20_charge_init();
 	acer_t20_regulator_init();
 
+#ifdef CONFIG_TOUCHSCREEN_CYPRESS
+	ventana_touch_init_cypress();
+#endif
+#ifdef CONFIG_TOUCHSCREEN_ATMEL_MXT1386
+	touch_init_atmel_mXT1386();
+#endif
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_768E
 	touch_init_atmel_mXT768e();
 #endif
 #ifdef CONFIG_KEYBOARD_GPIO
-	picasso_keys_init();
+	acer_keys_init();
 #endif
 #ifdef CONFIG_ROTATELOCK
         rotationlock_init();
 #endif
+#ifdef CONFIG_DOCK_V1
+	acer_dock_init();
+#endif
 	acer_board_info();
 
+#ifdef CONFIG_PSENSOR
+	p_sensor_init();
+#endif
 	ventana_usb_init();
 	ventana_gps_init();
 	ventana_panel_init();
@@ -806,6 +1028,16 @@ MACHINE_START(VENTANA, "picasso")
 MACHINE_END
 
 MACHINE_START(PICASSO, "picasso")
+	.boot_params    = 0x00000100,
+	.map_io         = tegra_map_common_io,
+	.reserve        = tegra_ventana_reserve,
+	.init_early	= tegra_init_early,
+	.init_irq	= tegra_init_irq,
+	.timer          = &tegra_timer,
+	.init_machine	= acer_t20_init,
+MACHINE_END
+
+MACHINE_START(VANGOGH, "vangogh")
 	.boot_params    = 0x00000100,
 	.map_io         = tegra_map_common_io,
 	.reserve        = tegra_ventana_reserve,

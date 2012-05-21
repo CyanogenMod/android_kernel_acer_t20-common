@@ -37,10 +37,6 @@
 #include "yuv_init_tab_vangogh.h"
 #endif
 
-#define YUV_SENSOR_OE_GPIO    90
-#define YUV_SENSOR_RST_GPIO   92
-#define CAMERA_POWER_GPIO     172
-
 #define SENSOR_WIDTH_REG      0x2703
 #define SENSOR_640_WIDTH_VAL  0x280
 #define SENSOR_800_WIDTH_VAL  0x320
@@ -261,9 +257,8 @@ static int sensor_get_exposure_time(struct sensor_info *info, unsigned int *expo
 
 	// exposure time = 1/frame rate
 	// exposure_time_denominator = frame rate
-	// when val under 4, camera frame rate is always 30 fps
-	if(val < 4)
-		*exposure_time_denominator = 30;
+	if(val == 0)
+		*exposure_time_denominator = 120;
 	else
 		*exposure_time_denominator = (unsigned int)(120/val);
 
@@ -473,6 +468,7 @@ static struct miscdevice sensor_device = {
 	.fops = &sensor_fileops,
 };
 
+#if defined(CONFIG_MACH_PICASSO_E)
 static int yuv_initialize(struct sensor_info *info){
 	int err;
 
@@ -513,6 +509,7 @@ static int yuv_initialize(struct sensor_info *info){
 	pr_info("%s --\n", __func__);
 	return 0;
 }
+#endif
 
 static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
@@ -540,10 +537,12 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	info->i2c_client = client;
 	info->mode = 0;
 
+#if defined(CONFIG_MACH_PICASSO_E)
 	if (yuv_initialize(info) != 0) {
 		kfree(info);
 		return -ENODEV;
 	}
+#endif
 
 	i2c_set_clientdata(client, info);
 

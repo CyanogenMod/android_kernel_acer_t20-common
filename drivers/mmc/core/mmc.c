@@ -24,6 +24,7 @@
 
 #if defined(CONFIG_ARCH_ACER_T20) || defined(CONFIG_ARCH_ACER_T30)
 #define SANDISK_X3_CID_MID 69
+unsigned int boot_partition_sectors = 0;
 #endif
 
 static const unsigned int tran_exp[] = {
@@ -258,8 +259,16 @@ static int mmc_read_ext_csd(struct mmc_card *card)
 			ext_csd[EXT_CSD_SEC_CNT + 3] << 24;
 
 		/* Cards with density > 2GiB are sector addressed */
-		if (card->ext_csd.sectors > (2u * 1024 * 1024 * 1024) / 512)
+		if (card->ext_csd.sectors > (2u * 1024 * 1024 * 1024) / 512) {
+#ifdef CONFIG_ARCH_ACER_T20
+			if (card->host->index == 0) {
+				/* size is in 256K chunks, i.e. 512 sectors each */
+				/* This algorithm is defined and used by nVidia, according to eMMC 4.41, size is in 128K chunks */
+				boot_partition_sectors = ext_csd[EXT_CSD_BOOT_SIZE_MULTI] * 512;
+			}
+#endif
 			mmc_card_set_blockaddr(card);
+		}
 	}
 
 	switch (ext_csd[EXT_CSD_CARD_TYPE] & EXT_CSD_CARD_TYPE_MASK) {

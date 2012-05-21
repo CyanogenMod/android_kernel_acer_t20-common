@@ -49,7 +49,9 @@ void tegra_move_framebuffer(unsigned long to, unsigned long from,
 	unsigned long size);
 bool is_tegra_debug_uartport_hs(void);
 int get_tegra_uart_debug_port_id(void);
+#if !defined(CONFIG_ARCH_ACER_T20)
 int arb_lost_recovery(int scl_gpio, int sda_gpio);
+#endif
 
 extern unsigned long tegra_bootloader_fb_start;
 extern unsigned long tegra_bootloader_fb_size;

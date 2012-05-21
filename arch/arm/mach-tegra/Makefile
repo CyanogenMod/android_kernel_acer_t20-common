@@ -33,7 +33,9 @@ obj-y                                   += fuse.o
 obj-y                                   += kfuse.o
 obj-y                                   += csi.o
 obj-$(CONFIG_TEGRA_SILICON_PLATFORM)    += tegra_odm_fuses.o
+ifneq ($(CONFIG_ARCH_ACER_T20),y)
 obj-y                                   += i2c_error_recovery.o
+endif
 obj-$(CONFIG_TEGRA_LEGACY_AUDIO)        += tegra_i2s_audio.o
 obj-$(CONFIG_TEGRA_LEGACY_AUDIO)        += tegra_spdif_audio.o
 obj-y                                   += mc.o
@@ -169,14 +171,24 @@ obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-sensors.o
 obj-${CONFIG_TEGRA_BB_XMM_POWER}        += baseband-xmm-power.o
 obj-${CONFIG_TEGRA_BB_XMM_POWER2}       += baseband-xmm-power2.o
 
-obj-${CONFIG_MACH_PICASSO}              += board-acer-t20.o
-obj-${CONFIG_MACH_PICASSO}              += board-acer-t20-pinmux.o
-obj-${CONFIG_MACH_PICASSO}              += board-acer-t20-sdhci.o
-obj-${CONFIG_MACH_PICASSO}              += board-acer-t20-power.o
-obj-${CONFIG_MACH_PICASSO}              += board-acer-t20-panel.o
-obj-${CONFIG_MACH_PICASSO}              += board-acer-t20-sensors.o
+obj-${CONFIG_ARCH_ACER_T20}             += board-acer-t20.o
+obj-${CONFIG_ARCH_ACER_T20}             += board-acer-t20-pinmux.o
+obj-${CONFIG_ARCH_ACER_T20}             += board-acer-t20-sdhci.o
+obj-${CONFIG_ARCH_ACER_T20}             += board-acer-t20-power.o
+obj-${CONFIG_ARCH_ACER_T20}             += board-acer-t20-panel.o
+obj-${CONFIG_ARCH_ACER_T20}             += board-acer-t20-sensors.o
 ifeq ($(CONFIG_MACH_PICASSO_E),y)
 obj-y                                   += board-picasso-e-memory.o
 else
 obj-${CONFIG_MACH_PICASSO}              += board-picasso-memory.o
 endif
+obj-${CONFIG_MACH_VANGOGH}              += board-vangogh-memory.o
+
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-kbc.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-panel.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-pinmux.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-power.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-sdhci.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-sensors.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-memory.o

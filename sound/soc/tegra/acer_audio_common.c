@@ -35,6 +35,17 @@
 
 #define AUDIO_COMMON_DRIVER_NAME "acer-audio-common"
 
+/* Enable log or not */
+#if 1
+#define ACER_DBG(fmt, arg...) printk(KERN_INFO "[AudioCommon](%d): " fmt "\n", __LINE__, ## arg)
+#else
+#define ACER_DBG(fmt, arg...) do {} while (0)
+#endif
+
+#if defined(CONFIG_ARCH_ACER_T20) && !defined(CONFIG_MACH_PICASSO_E)
+extern void start_stop_psensor(bool);
+#endif
+
 extern struct acer_audio_data audio_data;
 
 struct notifier_block notifier;
@@ -48,10 +59,14 @@ static int acer_audio_notifier(struct notifier_block *this,
 
 bool is_hp_plugged(void)
 {
-	if (!audio_data.gpio.hp_det)
+	if (audio_data.gpio.hp_det == GPIO_INVALID)
 		return false;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (gpio_get_value(audio_data.gpio.hp_det))
+#else
 	if (!gpio_get_value(audio_data.gpio.hp_det))
+#endif
 		return true;
 	else
 		return false;
@@ -59,7 +74,7 @@ bool is_hp_plugged(void)
 
 bool is_debug_on(void)
 {
-	if (!audio_data.gpio.debug_en)
+	if (audio_data.gpio.debug_en == GPIO_INVALID)
 		return false;
 
 	if (gpio_get_value(audio_data.gpio.debug_en))
@@ -70,7 +85,12 @@ bool is_debug_on(void)
 
 void wm8903_event_printf(const char* func, int event)
 {
+#if defined(CONFIG_ARCH_ACER_T30)
+	pr_info("[Audio]:%s = %d, bypass = %d\n", func, SND_SOC_DAPM_EVENT_ON(event),
+			gpio_get_value(audio_data.gpio.bypass_en));
+#else
 	pr_info("[Audio]:%s = %d\n", func, SND_SOC_DAPM_EVENT_ON(event));
+#endif
 }
 
 bool handset_mic_detect(struct snd_soc_codec *codec)
@@ -89,8 +109,13 @@ bool handset_mic_detect(struct snd_soc_codec *codec)
 	/* delay for avoiding pop noise when user plug in/out headset quickly */
 	msleep(1000);
 	if (!is_hp_plugged()) {
+		ACER_DBG("Do not enalbe mic bias when user plug in/out headset quickly");
 		return false;
 	}
+
+#if defined(CONFIG_ARCH_ACER_T20) && !defined(CONFIG_MACH_PICASSO_E)
+	start_stop_psensor(false);
+#endif
 
 	snd_soc_update_bits(codec, WM8903_CLOCK_RATES_2,
 				WM8903_CLK_SYS_ENA_MASK, WM8903_CLK_SYS_ENA);
@@ -130,9 +155,15 @@ bool handset_mic_detect(struct snd_soc_codec *codec)
 	snd_soc_update_bits(codec, WM8903_MIC_BIAS_CONTROL_0, WM8903_MICDET_ENA, 0);
 	snd_soc_update_bits(codec, WM8903_MIC_BIAS_CONTROL_0, WM8903_MICBIAS_ENA, is_recording);
 
+#if defined(CONFIG_ARCH_ACER_T20) && !defined(CONFIG_MACH_PICASSO_E)
+	start_stop_psensor(true);
+#endif
+
 	if (withMic > withoutMic) {
+		ACER_DBG("%s HEADSET_WITH_MIC !\n", __func__);
 		return true;
 	} else {
+		ACER_DBG("%s HEADSET_WITHOUT_MIC !\n", __func__);
 		return false;
 	}
 }
@@ -145,6 +176,7 @@ static int acer_audio_common_probe(struct platform_device *pdev)
 
 static int acer_audio_common_remove(struct platform_device *pdev)
 {
+	ACER_DBG("%s", __func__);
 	return 0;
 }
 
@@ -165,6 +197,7 @@ static struct platform_device acer_audio_common_device = {
 static int __init acer_audio_common_init(void)
 {
 	int ret;
+	ACER_DBG("%s", __func__);
 	ret = platform_driver_register(&acer_audio_common_driver);
 	if (ret) {
 		pr_err("[acer_audio_control_driver] failed to register!!\n");

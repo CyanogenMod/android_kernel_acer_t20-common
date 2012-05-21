@@ -1139,6 +1139,11 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	struct sdhci_host *host;
 	bool present;
 	unsigned long flags;
+#if defined(CONFIG_ARCH_ACER_T20) || defined(CONFIG_ARCH_ACER_T30)
+       struct tegra_sdhci_platform_data *plat;
+
+       plat = mmc->parent->platform_data;
+#endif
 
 	host = mmc_priv(mmc);
 
@@ -1160,7 +1165,14 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	/* If polling, assume that the card is always present. */
 	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
+#if defined(CONFIG_ARCH_ACER_T20) || defined(CONFIG_ARCH_ACER_T30)
+               if (plat->cd_gpio != -1)
+                       present = !(gpio_get_value(plat->cd_gpio));
+               else
+                       present = true;
+#else
 		present = true;
+#endif
 	else
 		present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
 				SDHCI_CARD_PRESENT;
@@ -1568,8 +1580,38 @@ static void sdhci_tasklet_card(unsigned long param)
 {
 	struct sdhci_host *host;
 	unsigned long flags;
+#if defined(CONFIG_ARCH_ACER_T20) || defined(CONFIG_ARCH_ACER_T30)
+	struct tegra_sdhci_platform_data *plat;
+#endif
 
 	host = (struct sdhci_host*)param;
+
+#if defined(CONFIG_ARCH_ACER_T20) || defined(CONFIG_ARCH_ACER_T30)
+	plat = host->mmc->parent->platform_data;
+
+	if (plat->cd_gpio != -1) {
+		if (!gpio_get_value(plat->cd_gpio)) {
+			mmc_detect_change(host->mmc, msecs_to_jiffies(1000));
+		} else {
+			spin_lock_irqsave(&host->lock, flags);
+			if (host->mrq) {
+				printk(KERN_ERR "%s: Card removed during transfer!\n",
+					mmc_hostname(host->mmc));
+				printk(KERN_ERR "%s: Resetting controller.\n",
+					mmc_hostname(host->mmc));
+
+				sdhci_reset(host, SDHCI_RESET_CMD);
+				sdhci_reset(host, SDHCI_RESET_DATA);
+
+				host->mrq->cmd->error = -ENOMEDIUM;
+				tasklet_schedule(&host->finish_tasklet);
+			}
+			spin_unlock_irqrestore(&host->lock, flags);
+			mmc_detect_change(host->mmc, msecs_to_jiffies(1000));
+		}
+		return;
+	}
+#endif
 
 	spin_lock_irqsave(&host->lock, flags);
 

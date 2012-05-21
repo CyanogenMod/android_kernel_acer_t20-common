@@ -56,15 +56,15 @@ config MPU_SENSORS_KXTF9
       This enables support for the Kionix KXFT9 accelerometer
 endchoice
 
-choice
-    prompt "Compass Type"
-    optional
-
- config MPU_SENSORS_AK8975
+config MPU_SENSORS_AK8975
     bool "AKM ak8975"
     help
       This enables support for the AKM ak8975 compass
-endchoice
+
+config MPU_SENSORS_YAS529
+    bool "Yamaha yas529"
+    help
+      This enables support for the Yamaha yas529 compass
 
 endif #INV_SENSORS
 

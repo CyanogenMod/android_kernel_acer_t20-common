@@ -555,6 +555,13 @@ config STK2203_LIGHT_SENSOR
 	---help---
 	Adds STK2203 light sensor driver
 
+config AL3000A_LIGHT_SENSOR
+	bool "AL3000A light sensor driver"
+	depends on I2C
+	default n
+	---help---
+	Adds al3000a light sensor driver
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

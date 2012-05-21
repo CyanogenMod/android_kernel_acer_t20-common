@@ -89,7 +89,7 @@ config VIDEO_LTC3216
         depends on I2C && ARCH_TEGRA
         default n
         ---help---
-          This is a driver for AD5820 focuser
+          This is a driver for the LTC3216 flash/torch camera device
 
 config TORCH_TPS61050YZGR
         tristate "TPS61050YZGR flash/torch support"

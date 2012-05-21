@@ -12,6 +12,10 @@ struct lcd_edid {
 
 int checkLCM(void)
 {
+    if(lcdedid->edid->data==NULL) {
+        pr_info("lcd_edid: lcd edid data is NULL\n");
+        return -1;
+    }
     if(0x14 == lcdedid->edid->data->dc_edid.buf[17]) {
         pr_info("lcd_edid: lcd CABC pin is pulled low\n");
         return 0;

@@ -790,7 +790,7 @@ static int ov5650_read_reg(struct i2c_client *client, u16 addr, u8 *val)
 
 	err = i2c_transfer(client->adapter, msg, 2);
 
-	if (err != 1)
+	if (err != 2)
 		return -EINVAL;
 
 	*val = data[2];
@@ -827,6 +827,7 @@ static int ov5650_write_reg(struct i2c_client *client, u16 addr, u8 val)
 	int err;
 	struct i2c_msg msg;
 	unsigned char data[3];
+	int retry = 0;
 
 	if (!client->adapter)
 		return -ENODEV;
@@ -840,11 +841,15 @@ static int ov5650_write_reg(struct i2c_client *client, u16 addr, u8 val)
 	msg.len = 3;
 	msg.buf = data;
 
+	do {
 	err = i2c_transfer(client->adapter, &msg, 1);
 	if (err == 1)
 		return 0;
-
-	pr_err("ov5650: i2c transfer failed, retrying %x %x\n",	addr, val);
+		retry++;
+		pr_err("ov5650: i2c transfer failed, retrying %x %x\n",
+			addr, val);
+		usleep_range(3000, 3250);
+	} while (retry <= OV5650_MAX_RETRIES);
 
 	return err;
 }
@@ -1248,6 +1253,9 @@ static int ov5650_set_power(int powerLevel)
 	pr_info("%s: powerLevel=%d camera mode=%d\n", __func__, powerLevel,
 			stereo_ov5650_info->camera_mode);
 
+	if (stereo_ov5650_info->camera_mode == Main)
+		set_power_helper(stereo_ov5650_info->left.pdata, powerLevel);
+
 	if (StereoCameraMode_Left & stereo_ov5650_info->camera_mode)
 		set_power_helper(stereo_ov5650_info->left.pdata, powerLevel);
 
@@ -1277,11 +1285,13 @@ static long ov5650_ioctl(struct file *file,
 			if (err)
 				return err;
 		}
+		pr_info("%s: set_camera_mode %lu\n", __func__, arg);
 		return 0;
 	}
 	case OV5650_IOCTL_SYNC_SENSORS:
 		if (info->right.pdata->synchronize_sensors)
 			info->right.pdata->synchronize_sensors();
+		pr_info("%s: sync_sensor\n", __func__);
 		return 0;
 	case OV5650_IOCTL_SET_MODE:
 	{
@@ -1302,6 +1312,7 @@ static long ov5650_ioctl(struct file *file,
 	case OV5650_IOCTL_SET_GAIN:
 		return ov5650_set_gain(info, (u16)arg);
 	case OV5650_IOCTL_SET_BINNING:
+		pr_info("%s: set_binning\n", __func__);
 		return ov5650_set_binning(info, (u8)arg);
 	case OV5650_IOCTL_GET_STATUS:
 	{
@@ -1311,6 +1322,7 @@ static long ov5650_ioctl(struct file *file,
 			pr_info("%s %d\n", __func__, __LINE__);
 			return -EFAULT;
 		}
+		pr_info("%s: get_status\n", __func__);
 		return 0;
 	}
 	case OV5650_IOCTL_TEST_PATTERN:
@@ -1318,9 +1330,11 @@ static long ov5650_ioctl(struct file *file,
 		err = ov5650_test_pattern(info, (enum ov5650_test_pattern) arg);
 		if (err)
 			pr_err("%s %d %d\n", __func__, __LINE__, err);
+		pr_info("%s: test_pattern\n", __func__);
 		return err;
 	}
 	default:
+		pr_info("%s: default\n", __func__);
 		return -EINVAL;
 	}
 	return 0;
@@ -1328,14 +1342,34 @@ static long ov5650_ioctl(struct file *file,
 
 static int ov5650_open(struct inode *inode, struct file *file)
 {
+	u8 reg_300E;
+
 	pr_info("%s\n", __func__);
 	file->private_data = stereo_ov5650_info;
 	ov5650_set_power(1);
+
+	// 0x300E[4:3] stands for MIPI TX/RX PHY power down
+	// set register 0x300E[4:3] to 2'b00
+	ov5650_read_reg(stereo_ov5650_info->left.i2c_client, 0x300E, &reg_300E);
+	reg_300E &= ~0x18;
+	ov5650_write_reg(stereo_ov5650_info->left.i2c_client, 0x300E, reg_300E);
+
 	return 0;
 }
 
 int ov5650_release(struct inode *inode, struct file *file)
 {
+	u8 reg_300E;
+
+	pr_info("%s\n", __func__);
+
+	// 0x300E[4:3] stands for MIPI TX/RX PHY power down
+	// while in MIPI mode, set register 0x300E[4:3] to 2'b11
+	// before the PWDN pin is set to high
+	ov5650_read_reg(stereo_ov5650_info->left.i2c_client, 0x300E, &reg_300E);
+	reg_300E |= 0x18;
+	ov5650_write_reg(stereo_ov5650_info->left.i2c_client, 0x300E, reg_300E);
+
 	ov5650_set_power(0);
 	file->private_data = NULL;
 	return 0;
@@ -1390,18 +1424,53 @@ static int ov5650_remove_common(struct i2c_client *client)
 	return 0;
 }
 
+extern void extern_tegra_camera_enable_vi(void);
+extern void extern_tegra_camera_disable_vi(void);
+
 static int left_ov5650_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	int err;
+	int device_check_ret, retry = 0;
+	u8 read_val = 0;
+	u8 reg_300E;
+
 	pr_info("%s: probing sensor.\n", __func__);
 
 	err = ov5650_probe_common();
 	if (err)
 		return err;
 
+	stereo_ov5650_info->camera_mode = Main;
 	stereo_ov5650_info->left.pdata = client->dev.platform_data;
 	stereo_ov5650_info->left.i2c_client = client;
+
+	extern_tegra_camera_enable_vi();
+	ov5650_set_power(1);
+
+	do {
+		device_check_ret = ov5650_read_reg(client, 0x300A, &read_val);
+		if (device_check_ret == 0)
+			break;
+		retry++;
+	} while (retry < OV5650_MAX_RETRIES);
+
+	// 0x300E[4:3] stands for MIPI TX/RX PHY power down
+	// while in MIPI mode, set register 0x300E[4:3] to 2'b11
+	// before the PWDN pin is set to high
+	ov5650_read_reg(stereo_ov5650_info->left.i2c_client, 0x300E, &reg_300E);
+	reg_300E |= 0x18;
+	ov5650_write_reg(stereo_ov5650_info->left.i2c_client, 0x300E, reg_300E);
+
+	ov5650_set_power(0);
+	extern_tegra_camera_disable_vi();
+
+	if (device_check_ret != 0) {
+		pr_err("ov5650 cannot read chip_id\n");
+		misc_deregister(&ov5650_device);
+		kfree(stereo_ov5650_info);
+		return device_check_ret;
+	}
 
 	return 0;
 }
@@ -1433,6 +1502,7 @@ static struct i2c_driver left_ov5650_i2c_driver = {
 	.id_table = left_ov5650_id,
 };
 
+#if !defined(CONFIG_ARCH_ACER_T20)
 static int right_ov5650_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -1474,20 +1544,28 @@ static struct i2c_driver right_ov5650_i2c_driver = {
 	.remove = right_ov5650_remove,
 	.id_table = right_ov5650_id,
 };
+#endif /* !CONFIG_ARCH_ACER_T20 */
 
 static int __init ov5650_init(void)
 {
 	int ret;
 	pr_info("ov5650 sensor driver loading\n");
 	ret = i2c_add_driver(&left_ov5650_i2c_driver);
+#if defined(CONFIG_ARCH_ACER_T20)
+	return ret;
+#else
 	if (ret)
 		return ret;
 	return i2c_add_driver(&right_ov5650_i2c_driver);
+#endif
 }
 
 static void __exit ov5650_exit(void)
 {
+	pr_info("%s\n", __func__);
+#if !defined(CONFIG_ARCH_ACER_T20)
 	i2c_del_driver(&right_ov5650_i2c_driver);
+#endif
 	i2c_del_driver(&left_ov5650_i2c_driver);
 }
 

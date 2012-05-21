@@ -5,6 +5,8 @@
 #include <linux/delay.h>
 #include <sound/wm8903.h>
 
+#define GPIO_INVALID -1
+
 extern bool is_hp_plugged(void);
 extern bool is_debug_on(void);
 extern void wm8903_event_printf(const char* func, int event);
@@ -35,6 +37,7 @@ struct acer_gpio_data {
 	int int_mic_en;
 	int bypass_en;
 	int debug_en;
+	int spkr_mute;
 };
 
 struct acer_state_data {

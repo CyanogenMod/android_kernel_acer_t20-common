@@ -438,12 +438,13 @@ static void debug_not_idle(struct nvhost_master *dev)
 
 	for (i = 0; i < dev->nb_channels; i++) {
 		struct nvhost_module *mod = &dev->channels[i].mod;
-		mutex_lock(&mod->lock);
-		if (mod->name)
-			dev_warn(&dev->pdev->dev,
-					"tegra_grhost: %s: refcnt %d\n",
-					mod->name, mod->refcount);
-		mutex_unlock(&mod->lock);
+		if (mod->name){
+			mutex_lock(&mod->lock);
+				dev_warn(&dev->pdev->dev,
+						"tegra_grhost: %s: refcnt %d\n",
+						mod->name, mod->refcount);
+			mutex_unlock(&mod->lock);
+		}
 	}
 
 	for (i = 0; i < dev->nb_mlocks; i++) {

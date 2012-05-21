@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <media/yuv5_sensor.h>
+#include <media/tegra_camera.h>
 
 #if defined(CONFIG_LSC_FROM_EC)
 #include <media/lsc_from_ec.h>
@@ -47,10 +48,11 @@
 #define ONE_TIME_TABLE_CHECK_DATA 0x086C
 
 #define MAX_RETRIES 3
-extern int tegra_camera_enable_csi_power(void);
-extern int tegra_camera_disable_csi_power(void);
+extern void extern_tegra_camera_enable_vi(void);
+extern void extern_tegra_camera_disable_vi(void);
+extern void extern_tegra_camera_clk_set_rate(struct tegra_camera_clk_info *);
 
-static int preview_mode = SENSOR_MODE_1280x960;
+static int preview_mode = SENSOR_MODE_800x600;
 static u16 lowlight_reg = 0xB804;
 static u16 lowlight_threshold = 0x3000;
 static u16 lowlight_fps_threshold = 19;
@@ -415,10 +417,10 @@ static int sensor_set_mode(struct sensor_info *info, struct sensor_5m_mode *mode
 
 	if (mode->xres == 2592 && mode->yres == 1944)
 		sensor_table = SENSOR_MODE_2592x1944;
-	else if (mode->xres == 1280 && mode->yres == 960)
-		sensor_table = SENSOR_MODE_1280x960;
 	else if (mode->xres == 1280 && mode->yres == 720)
 		sensor_table = SENSOR_MODE_1280x720;
+	else if (mode->xres == 800 && mode->yres == 600)
+		sensor_table = SENSOR_MODE_800x600;
 	else if (mode->xres == 640 && mode->yres == 480)
 		sensor_table = SENSOR_MODE_640x480;
 	else {
@@ -462,15 +464,18 @@ static int sensor_set_mode(struct sensor_info *info, struct sensor_5m_mode *mode
 		err = sensor_write_table(info->i2c_client, is_capture);
 		if (err)
 			return err;
+
+		return 0;
 	}
 
-	if (!((val == SENSOR_5M_640_WIDTH_VAL) && (sensor_table == preview_mode))) {
-		pr_info("yuv5 %s: (!((val == SENSOR_5M_640_WIDTH_VAL) && (sensor_table == preview_mode)))\n", __func__);
-		// the sensor table has been updated, needn't do it again
-		if (sensor_table == SENSOR_MODE_2592x1944)
-			return 0 ;
+	if ((info->mode == sensor_table) && (val == SENSOR_5M_640_WIDTH_VAL) ) {
+		pr_info("yuv5 %s: no sensor_mode change\n", __func__);
+		err = sensor_write_table(info->i2c_client, is_preview);
+		if (err)
+			return err;
 
-		pr_info("yuv5 %s: initialize sensor table %d\n", __func__, sensor_table);
+	} else {
+		pr_info("yuv5 %s: change mode from %d to %d\n", __func__, info->mode, sensor_table);
 		err = sensor_write_table(info->i2c_client, mode_table[sensor_table]);
 		if (err)
 			return err;
@@ -488,16 +493,10 @@ static int sensor_set_mode(struct sensor_info *info, struct sensor_5m_mode *mode
 		err = sensor_write_table(info->i2c_client, is_preview);
 		if (err)
 			return err;
+
+		info->mode = sensor_table;
 	}
 
-	if ((val == SENSOR_5M_640_WIDTH_VAL) && (sensor_table == preview_mode)) {
-		pr_info("yuv5 %s: ((val == SENSOR_5M_640_WIDTH_VAL) && (sensor_table == preview_mode))\n", __func__);
-		err = sensor_write_table(info->i2c_client, is_preview);
-		if (err)
-			return err;
-	}
-
-	info->mode = sensor_table;
 	// One time programming table start ONE_TIME_TABLE_CHECK_REG
 	err = get_sensor_current_width(info->i2c_client, &val, ONE_TIME_TABLE_CHECK_REG);
 	if (!(val == ONE_TIME_TABLE_CHECK_DATA)) {
@@ -961,8 +960,8 @@ static int sensor_probe(struct i2c_client *client,
 #if !defined(CONFIG_MACH_VANGOGH)
 	int device_check_ret, retry = 0;
 	u16 read_val = 0;
+	struct tegra_camera_clk_info clk_info;
 #endif
-
 	pr_info("yuv5 %s\n", __func__);
 
 	info = kzalloc(sizeof(struct sensor_info), GFP_KERNEL);
@@ -976,7 +975,13 @@ static int sensor_probe(struct i2c_client *client,
 	info->i2c_client = client;
 
 #if !defined(CONFIG_MACH_VANGOGH)
-	tegra_camera_enable_csi_power();
+	// set MCLK to 24MHz
+	clk_info.id = TEGRA_CAMERA_MODULE_VI;
+	clk_info.clk_id = TEGRA_CAMERA_VI_SENSOR_CLK;
+	clk_info.rate = 24000000;
+	extern_tegra_camera_clk_set_rate(&clk_info);
+
+	extern_tegra_camera_enable_vi();
 	if (info->pdata && info->pdata->power_on)
 		info->pdata->power_on();
 
@@ -990,7 +995,7 @@ static int sensor_probe(struct i2c_client *client,
 
 	if (info->pdata && info->pdata->power_off)
 		info->pdata->power_off();
-	tegra_camera_disable_csi_power();
+	extern_tegra_camera_disable_vi();
 
 	if (device_check_ret != 0) {
 		pr_err("yuv5 %s: cannot read chip_id\n", __func__);

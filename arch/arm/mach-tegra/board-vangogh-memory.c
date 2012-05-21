@@ -1070,13 +1070,13 @@ int acer_t20_emc_init(void)
 		tegra_init_emc(vangogh_emc_tables_elpida_4Gb_300Mhz, ARRAY_SIZE(vangogh_emc_tables_elpida_4Gb_300Mhz));
 		break;
 	case 2:
-		tegra_init_emc(vanGogh_emc_tables_Hynix_4Gb_300Mhz, ARRAY_SIZE(vangogh_emc_tables_Hynix_4Gb_300Mhz));
+		tegra_init_emc(vangogh_emc_tables_Hynix_4Gb_300Mhz, ARRAY_SIZE(vangogh_emc_tables_Hynix_4Gb_300Mhz));
 		break;
 	case 3:
-		tegra_init_emc(vanGogh_emc_tables_Hynix_8Gb_300Mhz, ARRAY_SIZE(vangogh_emc_tables_Hynix_8Gb_300Mhz));
+		tegra_init_emc(vangogh_emc_tables_Hynix_8Gb_300Mhz, ARRAY_SIZE(vangogh_emc_tables_Hynix_8Gb_300Mhz));
 		break;
 	default:
-		tegra_init_emc(vanGogh_emc_tables_elpida_4Gb_300Mhz, ARRAY_SIZE(vangogh_emc_tables_elpida_4Gb_300Mhz));
+		tegra_init_emc(vangogh_emc_tables_elpida_4Gb_300Mhz, ARRAY_SIZE(vangogh_emc_tables_elpida_4Gb_300Mhz));
 	}
 
 	return 0;

@@ -18,6 +18,9 @@
 
 #define LTC3216_MAX_RETRIES (3)
 
+extern void extern_tegra_camera_enable_vi(void);
+extern void extern_tegra_camera_disable_vi(void);
+
 bool flash_on;
 
 struct ltc3216_info {
@@ -119,6 +122,35 @@ static struct miscdevice ltc3216_device = {
 	.fops = &ltc3216_fileops,
 };
 
+void ltc3216_turn_on_flash(void)
+{
+	pr_info("%s() call\n", __func__);
+	// set STIM to 11111b, Timer = STIM x 32.8ms = 1.02s
+	ltc3216_write(info_flash->i2c_client, 0x03DF);
+
+	ltc3216_write(info_flash->i2c_client, 0x0090);
+	ltc3216_write(info_flash->i2c_client, 0x018E);
+}
+
+void ltc3216_turn_off_flash(void)
+{
+	pr_info("%s() call\n", __func__);
+	ltc3216_write(info_flash->i2c_client, 0x0000);
+	ltc3216_write(info_flash->i2c_client, 0x0104);
+}
+
+void ltc3216_turn_on_torch(void)
+{
+	pr_info("%s() call\n", __func__);
+	ltc3216_write(info_flash->i2c_client, 0x0053);
+}
+
+void ltc3216_turn_off_torch(void)
+{
+	pr_info("%s() call\n", __func__);
+	ltc3216_write(info_flash->i2c_client, 0x0000);
+}
+
 static int ltc3216_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -140,6 +172,11 @@ static int ltc3216_probe(struct i2c_client *client,
 	}
 
 	info_flash->i2c_client = client;
+
+	extern_tegra_camera_enable_vi();
+	ltc3216_turn_off_torch();
+	extern_tegra_camera_disable_vi();
+
 	return 0;
 }
 
@@ -178,35 +215,6 @@ static int __init ltc3216_init(void)
 static void __exit ltc3216_exit(void)
 {
 	i2c_del_driver(&ltc3216_i2c_driver);
-}
-
-void ltc3216_turn_on_flash(void)
-{
-	pr_info("%s() call\n", __func__);
-	// set STIM to 11111b, Timer = STIM x 32.8ms = 1.02s
-	ltc3216_write(info_flash->i2c_client, 0x03DF);
-
-	ltc3216_write(info_flash->i2c_client, 0x0090);
-	ltc3216_write(info_flash->i2c_client, 0x018E);
-}
-
-void ltc3216_turn_off_flash(void)
-{
-	pr_info("%s() call\n", __func__);
-	ltc3216_write(info_flash->i2c_client, 0x0000);
-	ltc3216_write(info_flash->i2c_client, 0x0104);
-}
-
-void ltc3216_turn_on_torch(void)
-{
-	pr_info("%s() call\n", __func__);
-	ltc3216_write(info_flash->i2c_client, 0x0053);
-}
-
-void ltc3216_turn_off_torch(void)
-{
-	pr_info("%s() call\n", __func__);
-	ltc3216_write(info_flash->i2c_client, 0x0000);
 }
 
 module_init(ltc3216_init);

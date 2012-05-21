@@ -463,6 +463,22 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 		 * programming mode even when things go wrong.
 		 */
 		if (brq.cmd.error || brq.data.error || brq.stop.error) {
+#if defined(CONFIG_ARCH_ACER_T20)
+			if (card->host->index == 1) {
+				spin_lock_irq(&md->lock);
+				ret = __blk_end_request(req, -ENODEV, brq.data.blksz * brq.data.blocks);
+				spin_unlock_irq(&md->lock);
+				continue;
+			}
+#elif defined(CONFIG_ARCH_ACER_T30)
+			if (card->host->index == 2) {
+				spin_lock_irq(&md->lock);
+				ret = __blk_end_request(req, -ENODEV, brq.data.blksz * brq.data.blocks);
+				spin_unlock_irq(&md->lock);
+				continue;
+			}
+#endif
+
 			if (brq.data.blocks > 1 && rq_data_dir(req) == READ) {
 				/* Redo read one sector at a time */
 				printk(KERN_WARNING "%s: retrying using single "

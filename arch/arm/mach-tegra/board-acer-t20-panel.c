@@ -210,6 +210,7 @@ static struct resource ventana_disp2_resources[] = {
 
 static struct tegra_dc_mode ventana_panel_modes[] = {
 	{
+#if defined(CONFIG_MACH_PICASSO)
 		.pclk = 70500000,
 		.h_ref_to_sync = 11,
 		.v_ref_to_sync = 1,
@@ -221,13 +222,33 @@ static struct tegra_dc_mode ventana_panel_modes[] = {
 		.v_active = 800,
 		.h_front_porch = 58,
 		.v_front_porch = 4,
+#endif
+#if defined(CONFIG_MACH_VANGOGH)
+		.pclk = 54000000,
+		.h_ref_to_sync = 11,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 20,
+		.v_sync_width = 5,
+		.h_back_porch = 150,
+		.v_back_porch = 5,
+		.h_active = 1024,
+		.v_active = 600,
+		.h_front_porch = 150,
+		.v_front_porch = 15,
+#endif
 	},
 };
 
 static struct tegra_fb_data ventana_fb_data = {
 	.win		= 0,
+#if defined(CONFIG_MACH_PICASSO)
 	.xres		= 1280,
 	.yres		= 800,
+#endif
+#if defined(CONFIG_MACH_VANGOGH)
+	.xres		= 1024,
+	.yres		= 600,
+#endif
 	.bits_per_pixel	= 32,
 	.flags		= TEGRA_FB_FLIP_ON_PROBE,
 };
