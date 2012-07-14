@@ -188,7 +188,7 @@ static int tegra_wm8903_hw_params(struct snd_pcm_substream *substream,
 #endif
 
 #if defined(CONFIG_ARCH_ACER_T20)
-	acer_volume_setting(codec, substream);
+//	acer_volume_setting(codec, substream);
 #endif
 	return 0;
 }
@@ -552,7 +552,7 @@ static int tegra_wm8903_event_int_mic(struct snd_soc_dapm_widget *w,
 
 #if defined(CONFIG_ARCH_ACER_T20)
 	set_int_mic_state(SND_SOC_DAPM_EVENT_ON(event) ? true : false);
-	tune_codec_setting(audio_data.mode.input_source);
+//	tune_codec_setting(audio_data.mode.input_source);
 	fm2018_switch(pdata);
 #else
 	gpio_set_value_cansleep(pdata->gpio_int_mic_en,
@@ -579,7 +579,7 @@ static int tegra_wm8903_event_ext_mic(struct snd_soc_dapm_widget *w,
 		return 0;
 
 	set_ext_mic_state(SND_SOC_DAPM_EVENT_ON(event) ? true : false);
-	tune_codec_setting(audio_data.mode.input_source);
+//	tune_codec_setting(audio_data.mode.input_source);
 	fm2018_switch(pdata);
 #else
 	if (!(machine->gpio_requested & GPIO_EXT_MIC_EN))
