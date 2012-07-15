@@ -291,7 +291,7 @@ int switch_audio_table(int control_mode, bool fromAP)
 	if (!fromAP) {
 		audio_data.mode.input_source = control_mode;
 	}
-	tune_codec_setting(control_mode);
+//	tune_codec_setting(control_mode);
 	setAudioTable(control_mode);
 }
 
